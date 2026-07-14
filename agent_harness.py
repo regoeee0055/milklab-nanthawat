@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-# ดึงฟังก์ชันที่เราทำสำเร็จแล้วจาก sales_logger มาใช้งานจริง
+# ดึงฟังก์ชันที่เราทำสำเร็จแล้วจาก sales_logger มาใช้งานจริง # Session 2.5 - Agent Harness completed
 from sales_logger import append_to_sheet, send_notification
 
 TOOL_SCHEMA = [
