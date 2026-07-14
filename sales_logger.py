@@ -26,7 +26,8 @@ def append_to_sheet(menu: str, qty: int, price: float) -> dict:
     # 1. ดึงคีย์พาสเวิร์ด Google Sheets จาก Environment
     creds_json = os.environ.get("GOOGLE_SHEETS_CREDENTIALS")
     if not creds_json:
-        raise RuntimeError("ไม่พบ GOOGLE_SHEETS_CREDENTIALS ใน Environment")
+        raise RuntimeError(
+            "ไม่พบ GOOGLE_SHEETS_CREDENTIALS ใน Environment")  # อิอิ
 
     try:
         # 2. ตั้งค่าสิทธิ์และล็อกอินเข้าใช้งาน Google Sheets API
