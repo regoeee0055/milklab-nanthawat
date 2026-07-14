@@ -1,0 +1,117 @@
+"""MilkLab Sales Logger (S2).
+
+Usage:
+    python sales_logger.py --menu "นมหมีฮอกไกโด" --qty 2 --price 65
+
+Reads GOOGLE_SHEETS_CREDENTIALS and TELEGRAM_BOT_TOKEN (or LINE_CHANNEL_TOKEN) from env.
+Appends row [timestamp, menu, qty, price, total] to a Google Sheet,
+then sends a notification via Telegram or LINE bot.
+
+นักศึกษาต้องเติม TODO ใน 4 จุดด้านล่างใน Session 2 Lab 1.3
+"""
+from datetime import datetime
+import sys
+import os
+import argparse
+import requests
+from google.oauth2.service_account import Credentials
+import gspread
+import json
+from dotenv import load_dotenv
+load_dotenv()
+
+
+def append_to_sheet(menu: str, qty: int, price: float) -> dict:
+    """TODO 1: ใช้ gspread เปิด Sheet ของตัวเอง แล้ว append_row ด้วย [timestamp, menu, qty, price, total]"""
+    # 1. ดึงคีย์พาสเวิร์ด Google Sheets จาก Environment
+    creds_json = os.environ.get("GOOGLE_SHEETS_CREDENTIALS")
+    if not creds_json:
+        raise RuntimeError("ไม่พบ GOOGLE_SHEETS_CREDENTIALS ใน Environment")
+
+    try:
+        # 2. ตั้งค่าสิทธิ์และล็อกอินเข้าใช้งาน Google Sheets API
+        scopes = ["https://www.googleapis.com/auth/spreadsheets",
+                  "https://www.googleapis.com/auth/drive"]
+        creds_data = json.loads(creds_json)
+        credentials = Credentials.from_service_account_info(
+            creds_data, scopes=scopes)
+        gc = gspread.authorize(credentials)
+
+        # 3. เปิดสมุดงาน (เปิดด้วยชื่อ Sheet ของคุณ เช่น 'MilkLab Sales')
+        # หมายเหตุ: นศ. สามารถเปลี่ยนชื่อ 'MilkLab Sales' ให้ตรงกับที่ตั้งไว้ใน Google Drive ได้ครับ
+        sh = gc.open("MilkLab")
+        worksheet = sh.get_worksheet(0)  # เปิดแผ่นงานแรก
+
+        # 4. คำนวณข้อมูลที่จะบันทึก
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        total = price * qty
+        row_data = [timestamp, menu, qty, price, total]
+
+        # 5. ยิงข้อมูลไปต่อแถวใหม่ใน Sheet
+        worksheet.append_row(row_data)
+
+        return {
+            "timestamp": timestamp,
+            "menu": menu,
+            "qty": qty,
+            "price": price,
+            "total": total
+        }
+    except Exception as e:
+        raise RuntimeError(f"การเข้าถึง Google Sheet ผิดพลาด: {e}")
+
+
+def send_notification(message: str) -> str:
+    """TODO 2: ส่ง message ไปยัง Telegram bot (ใช้ TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)"""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+
+    if not token or not chat_id:
+        raise RuntimeError(
+            "ไม่พบรหัสความลับ TELEGRAM_BOT_TOKEN หรือ TELEGRAM_CHAT_ID")
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": message
+    }
+
+    response = requests.post(url, json=payload)
+    if response.status_code != 200:
+        raise RuntimeError(f"Telegram API ส่งไม่สำเร็จ: {response.text}")
+
+    return "telegram"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="MilkLab Sales Logger")
+    parser.add_argument("--menu", required=True, help="ชื่อเมนู")
+    parser.add_argument("--qty", type=int, required=True, help="จำนวนขวด")
+    parser.add_argument("--price", type=float,
+                        required=True, help="ราคาต่อขวด")
+    args = parser.parse_args()
+
+    try:
+        # TODO 3: เรียก append_to_sheet แล้ว extract total
+        row = append_to_sheet(args.menu, args.qty, args.price)
+        total = row["total"]
+    except Exception as exc:
+        print(f"[ERROR] บันทึก Sheet ล้มเหลว: {exc}", file=sys.stderr)
+        print("[HINT] ตรวจ GOOGLE_SHEETS_CREDENTIALS และ share Sheet กับ service account email", file=sys.stderr)
+        return 1
+
+    try:
+        # TODO 4: เรียก send_notification ด้วย message ที่บอกยอดที่บันทึก
+        provider = send_notification(
+            f"บันทึก {args.menu} x{args.qty} = {total} บาท")
+    except Exception as exc:
+        print(
+            f"[WARN] บันทึก Sheet สำเร็จแต่ส่งแจ้งเตือนล้มเหลว: {exc}", file=sys.stderr)
+        return 0
+
+    print(f"[OK] บันทึกและแจ้งเตือนผ่าน {provider} เรียบร้อย ยอด {total} บาท")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
