@@ -8,6 +8,13 @@ Deploy: push to GitHub then Actions deploys to HuggingFace Space
 
 import os
 
+from google import genai
+from google.genai import types
+from dotenv import load_dotenv
+
+import faiss
+import numpy as np
+from sentence_transformers import SentenceTransformer
 import streamlit as st
 
 
@@ -18,23 +25,81 @@ def load_index():
 
     Returns: (model, index, chunks_list)
     """
-    raise NotImplementedError("Implement in Session 3 Lab 2.2 (TODO 1-3)")
+
+    model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+
+    with open("menu_kb.md", "r", encoding="utf-8") as f:
+        text = f.read()
+
+    chunks = [c.strip() for c in text.split("\n\n") if c.strip()]
+
+    embeddings = model.encode(chunks, convert_to_numpy=True)
+
+    dimension = embeddings.shape[1]
+    index = faiss.IndexFlatL2(dimension)
+    index.add(embeddings.astype("float32"))
+
+    return model, index, chunks
 
 
 def retrieve_top_k(query: str, model, index, chunks: list[str], k: int = 3) -> list[str]:
     """TODO 4: encode query, search index, return top-k chunks"""
-    raise NotImplementedError("Implement in Session 3 Lab 2.2 (TODO 4)")
+
+    query_embedding = model.encode([query], convert_to_numpy=True)
+
+    distances, indices = index.search(
+        query_embedding.astype("float32"),
+        k
+    )
+
+    results = []
+
+    for idx in indices[0]:
+        if idx != -1:
+            results.append(chunks[idx])
+
+    return results
 
 
 def generate_answer(query: str, context_chunks: list[str]) -> str:
-    """TODO 5: ส่ง query + context ไป Gemini, return answer
 
-    Hint: build prompt that says "ตอบจากข้อมูลต่อไปนี้เท่านั้น ถ้าไม่มีใน context ให้บอกว่าไม่รู้"
+    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+
+    if not api_key:
+        return "ไม่พบ GOOGLE_API_KEY"
+
+    client = genai.Client(api_key=api_key)
+
+    context = "\n\n".join(context_chunks)
+
+    prompt = f"""
+    ตอบจากข้อมูลต่อไปนี้เท่านั้น
+
+    หากไม่มีข้อมูลใน Context ให้ตอบว่า
+    "ขออภัย ไม่พบข้อมูลในฐานข้อมูล"
+
+    Context
+    --------
+    {context}
+
+    คำถาม
+    --------
+    {query}
     """
-    raise NotImplementedError("Implement in Session 3 Lab 2.2 (TODO 5)")
+
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0.2
+        )
+    )
+
+    return response.text
 
 
 def main():
+    load_dotenv()
     st.set_page_config(page_title="MilkLab° RAG", page_icon="🥛")
     st.title("MilkLab° RAG Chatbot")
     st.caption("ถามอะไรเกี่ยวกับ MilkLab ได้ ตอบจาก menu_kb.md")
@@ -65,7 +130,8 @@ def main():
             with st.expander("Source chunks"):
                 for i, c in enumerate(context, 1):
                     st.markdown(f"**[{i}]** {c}")
-        st.session_state.messages.append({"role": "assistant", "content": answer})
+        st.session_state.messages.append(
+            {"role": "assistant", "content": answer})
 
 
 if __name__ == "__main__":

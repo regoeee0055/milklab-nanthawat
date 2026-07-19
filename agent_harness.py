@@ -48,7 +48,7 @@ TOOL_SCHEMA = [
         },
     },
     {
-        "name": "send_alert",
+        "name": "send_notification",
         "description": "ส่ง message แจ้งเตือนผ่าน Bot",
         "parameters": {
             "type": "object",
@@ -59,6 +59,13 @@ TOOL_SCHEMA = [
         },
     },
 ]
+
+
+def write_log(event, data):
+    """เขียน log ลงไฟล์ agent_trace.log"""
+    with open("agent_trace.log", "a", encoding="utf-8") as f:
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        f.write(f"{ts} | {event} | {data}\n")
 
 
 def parse_command(cmd: str, api_key: str | None = None) -> dict:
@@ -130,7 +137,7 @@ def dispatch_tool(tool_call: dict) -> str:
         target_date = args.get("date")
         return f"ข้อมูลยอดขายของวันที่ {target_date} (Mock Result): รวมยอดขายทัังหมด 450 บาท"
 
-    elif tool_name == "send_alert":
+    elif tool_name == "send_notification":
         message = args.get("message", "")
         send_notification(message)
         return "ส่งแจ้งเตือนสำเร็จ"
@@ -146,18 +153,25 @@ def main() -> int:
     args = parser.parse_args()
 
     print(f"[USER] {args.cmd}")
+    write_log("user_input", args.cmd)
 
     try:
         # สั่งรันชุดคิดวิเคราะห์ของ LLM (TODO 3)
         tool_call = parse_command(args.cmd)
+        write_log(
+            "llm_response",
+            json.dumps(tool_call, ensure_ascii=False)
+        )
         print(f"[LLM]   tool={tool_call['tool']} args={tool_call['args']}")
 
         # สั่งสลับไปทำงานฟังก์ชันจริงหลังบ้าน
         result = dispatch_tool(tool_call)
+        write_log("tool_result", result)
         print(f"[TOOL] {tool_call['tool']} {result}")
         print(f"[USER] ← {result}")
 
     except Exception as exc:
+        write_log("tool_error", str(exc))
         print(f"[ERROR] ระบบพังล้มเหลว: {exc}", file=sys.stderr)
         return 1
 
